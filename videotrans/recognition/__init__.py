@@ -45,7 +45,6 @@ def check_model_name(recogn_type=0, name='',source_language_isLast=False,source_
         return True
     if name.find('/') > 0:
         return True
-
     if name.endswith('.en') and source_language_isLast:
         return '.en结尾的模型不可用于自动检测' if config.defaulelang == 'zh' else 'Models ending in .en may not be used for automated detection'
 
@@ -59,9 +58,6 @@ def check_model_name(recogn_type=0, name='',source_language_isLast=False,source_
         if not Path(config.ROOT_DIR + f"/models/{name}.pt").exists():
             return 'download'
         return True
-
-    #if name == 'large-v3-turbo':
-    #    return 'large-v3-turbo 模型只可在open-whisper本地模式下使用' if config.defaulelang == 'zh' else 'large-v3-turbo only use when openai-whisper'
 
     file = f'{config.ROOT_DIR}/models/models--Systran--faster-whisper-{name}/snapshots'
     if name.startswith('distil'):

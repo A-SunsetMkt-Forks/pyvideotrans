@@ -64,9 +64,6 @@ class FasterAll(BaseRecogn):
                     "is_cuda": self.is_cuda,
                     "detect_language": self.detect_language,
                     "audio_file": self.audio_file,
-                    "maxlen": self.maxlen,
-                    "flag": self.flag,
-                    "join_word_flag": self.join_word_flag,
                     "q": result_queue,
                     "settings": config.settings,
                     "defaulelang": config.defaulelang,
@@ -89,21 +86,22 @@ class FasterAll(BaseRecogn):
                         config.logger.info(f'需要自动检测语言，当前检测出的语言为{detect["langcode"]=}')
                         self.detect_language=detect['langcode']
                         self.inst.set_source_language(detect['langcode'])
-                    self.raws=self.re_segment_sentences(list(raws))
+                    self.raws=list(raws)
                 try:
                     if process.is_alive():
                         process.terminate()
                 except:
                     pass
         except (LookupError,ValueError,AttributeError,ArithmeticError) as e:
-            raise
-        except Exception as e:        
-            raise Exception(f"faster-whisper进程崩溃，请尝试使用openai-whisper模式或查看解决方案 https://pyvideotrans.com/12.html   :{e}")
+            self.error=str(e)
+        except Exception as e:
+            self.error=f"faster-whisper进程崩溃，请尝试使用openai-whisper模式或查看解决方案 https://pyvideotrans.com/12.html   :{e}"
         finally:
-            # 暂停2s，等待exit判断，循环线程退出
             config.model_process = None
             self.has_done = True
 
         if self.error:
             raise Exception(self.error)
-        return self.raws
+        if len(self.raws)<1:
+            raise Exception('未识别到有效文字' if config.defaulelang=='zh' else 'No speech detected')
+        return self.re_segment_sentences(self.raws)

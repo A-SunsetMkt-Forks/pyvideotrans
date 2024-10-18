@@ -6,14 +6,11 @@ from pathlib import Path
 
 import torch
 
-
-
 from faster_whisper import WhisperModel
 
 from videotrans.util.tools import ms_to_time_string,cleartext
 
-
-def run(raws, err,detect, *, model_name, is_cuda, detect_language, audio_file, maxlen, flag, join_word_flag,
+def run(raws, err,detect, *, model_name, is_cuda, detect_language, audio_file,
         q: multiprocessing.Queue, ROOT_DIR, TEMP_DIR, settings, defaulelang):
     os.chdir(ROOT_DIR)
     down_root = ROOT_DIR + "/models"
@@ -26,8 +23,8 @@ def run(raws, err,detect, *, model_name, is_cuda, detect_language, audio_file, m
 
     try:
         # 不存在 / ，是普通本地已有模型，直接本地加载，否则在线下载
-        local_res = True if model_name.find('/') == -1 else False
-        if not local_res:
+        local_file_only = True if model_name.find('/') == -1 else False
+        if not local_file_only:
             if not os.path.isdir(down_root + '/models--' + model_name.replace('/', '--')):
                 msg = '下载模型中，用时可能较久' if defaulelang == 'zh' else 'Download model from huggingface'
             else:
@@ -48,8 +45,7 @@ def run(raws, err,detect, *, model_name, is_cuda, detect_language, audio_file, m
                 num_workers=settings['whisper_worker'],
                 cpu_threads=os.cpu_count() if settings['whisper_threads'] < 1 else 
                     settings['whisper_threads'],
-                local_files_only=local_res
-
+                local_files_only=local_file_only
             )
         except Exception as e:
             if re.match(r'backend do not support', str(e), re.I):
@@ -61,7 +57,7 @@ def run(raws, err,detect, *, model_name, is_cuda, detect_language, audio_file, m
                     download_root=down_root,
                     num_workers=settings['whisper_worker'],
                     cpu_threads=os.cpu_count() if settings['whisper_threads'] < 1 else settings['whisper_threads'],
-                    local_files_only=local_res
+                    local_files_only=local_file_only
                 )
             else:
                 err['msg'] = str(e)
@@ -70,17 +66,16 @@ def run(raws, err,detect, *, model_name, is_cuda, detect_language, audio_file, m
         prompt = settings.get(f'initial_prompt_{detect_language}') if detect_language!='auto' else None
         segments, info = model.transcribe(
             audio_file,
-            beam_size=settings['beam_size'],
-            best_of=settings['best_of'],
-            condition_on_previous_text=settings['condition_on_previous_text'],
-            temperature=0.0 if int(float(settings.get('temperature',0))) == 0 else [0.0, 0.2, 0.4, 0.6,
-                                                                       0.8, 1.0],
+            beam_size=int(settings['beam_size']),
+            best_of=int(settings['best_of']),
+            condition_on_previous_text=bool(settings['condition_on_previous_text']),
+            temperature=0.0 if int(float(settings.get('temperature',0))) == 0 else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
             vad_filter=bool(settings['vad']),
             vad_parameters=dict(
-                min_silence_duration_ms=settings['overall_silence'],
-                max_speech_duration_s=float('inf'),
-                threshold=settings['overall_threshold'],
-                speech_pad_ms=settings['overall_speech_pad_ms']
+                min_silence_duration_ms=int(settings['min_silence_duration_ms']),
+                max_speech_duration_s= int(settings['max_speech_duration_s']) if int(settings['max_speech_duration_s'])>0 else float('inf'),
+                threshold=int(settings['threshold']),
+                speech_pad_ms=int(settings['speech_pad_ms'])
             ),
             word_timestamps=True,
             language=detect_language[:2] if detect_language!='auto' else None,
@@ -98,6 +93,7 @@ def run(raws, err,detect, *, model_name, is_cuda, detect_language, audio_file, m
                 new_seg.append({"start":int(word.start*1000),"end":int(word.end*1000),"word":word.word })
             text=cleartext(segment.text,remove_start_end=False)
             raws.append({"words":new_seg,"text":text})
+
             time_str=f'{ms_to_time_string(ms=segment.start*1000)} --> {ms_to_time_string(ms=segment.end*1000)}'
             q.put_nowait({"text": f'{nums}\n{time_str}\n{text}\n\n', "type": "subtitle"})
             q.put_nowait({"text": f' {"字幕" if defaulelang == "zh" else "Subtitles"} {len(raws) + 1} ', "type": "logs"})
